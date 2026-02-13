@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>발표 조회 시스템</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        :root {
+            --green-bg: #28a745;
+            --blue-bg: #007bff;
+            --gray-bg: #f8f9fa;
+            --border-color: #dee2e6;
+        }
+
+        body {
+            font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        /* --- 1. 메인 화면 스타일 (이미지 1 참고) --- */
+        #main-screen {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        .split-btn {
+            flex: 1;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            text-decoration: none;
+        }
+
+        .split-btn-content {
+            z-index: 2;
+            text-align: center;
+            color: white;
+        }
+
+        .split-btn h1 {
+            font-size: 3rem;
+            margin: 0;
+            font-weight: 900;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .split-btn i {
+            font-size: 8rem;
+            position: absolute;
+            opacity: 0.2;
+            transform: rotate(-15deg);
+        }
+
+        .btn-left {
+            background-color: var(--green-bg);
+        }
+        .btn-left i { right: 20%; bottom: 10%; } /* 책 아이콘 위치 */
+
+        .btn-right {
+            background-color: var(--blue-bg);
+        }
+        .btn-right i { right: 20%; bottom: 10%; } /* 펜 아이콘 위치 */
+
+        .split-btn:hover { filter: brightness(1.1); }
+
+        /* 모바일 반응형 */
+        @media (max-width: 768px) {
+            #main-screen { flex-direction: column; }
+            .split-btn h1 { font-size: 2rem; }
+            .split-btn i { font-size: 5rem; }
+        }
+
+        /* --- 2. 공통 컨테이너 및 팝업 스타일 --- */
+        .container {
+            display: none;
+            padding: 20px;
+            max-width: 1000px;
+            margin: 0 auto;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .active { display: block; }
+
+        .header-title {
+            text-align: center;
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 30px 0;
+            position: relative;
+        }
+        .header-title::after { /* 밑줄 효과 */
+            content: '';
+            display: block;
+            width: 50px;
+            height: 3px;
+            background: #333;
+            margin: 10px auto;
+        }
+
+        /* --- 3. 리스트 화면 스타일 (이미지 2 참고) --- */
+        .search-bar {
+            background: #fff;
+            border: 1px solid var(--border-color);
+            padding: 15px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+
+        .search-bar select, .search-bar input {
+            padding: 8px;
+            border: 1px solid #ccc;
+            height: 40px;
+            box-sizing: border-box;
+        }
+
+        .btn-search {
+            background: #333;
+            color: white;
+            border: none;
+            padding: 0 20px;
+            height: 40px;
+            cursor: pointer;
+        }
+
+        .list-table {
+            width: 100%;
+            border-collapse: collapse;
+            border-top: 2px solid #007bff;
+        }
+
+        .list-table th {
+            background: #f8f9fa;
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+            color: #333;
+            font-weight: bold;
+        }
+
+        .list-table td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+            color: #666;
+        }
+
+        .list-table tr:hover { background-color: #f1f3f5; cursor: pointer; }
+        
+        .empty-row { padding: 50px; color: #999; }
+
+        /* --- 4. 비밀번호 및 관리자 스타일 --- */
+        .pin-wrapper {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: white; z-index: 1000;
+            display: none; justify-content: center; align-items: center;
+            flex-direction: column;
+        }
+        .pin-inputs { display: flex; gap: 10px; margin: 20px; }
+        .pin-inputs input {
+            width: 50px; height: 60px; font-size: 30px; text-align: center;
+            border: 2px solid #ddd; border-radius: 10px;
+        }
+        
+        .admin-form label { display: block; margin-top: 15px; font-weight: bold; }
+        .admin-form input, .admin-form textarea { width: 100%; padding: 10px; margin-top: 5px; box-sizing: border-box; }
+        .btn-action {
+            margin-top: 20px; padding: 10px 20px; border: none; border-radius: 5px;
+            background: var(--blue-bg); color: white; cursor: pointer; font-size: 1rem;
+        }
+        .btn-secondary { background: #6c757d; }
+        .btn-danger { background: #dc3545; }
+
+        /* --- 5. 조회 상세 화면 --- */
+        .detail-card {
+            border: 1px solid #ddd; padding: 30px; border-radius: 10px;
+            max-width: 500px; margin: 0 auto; background: white;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .detail-row {
+            display: flex; justify-content: space-between;
+            margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px;
+        }
+        .detail-label { font-weight: bold; color: #555; }
+        .detail-value { font-weight: bold; color: #000; font-size: 1.1em; }
+        .result-highlight { color: var(--blue-bg); font-size: 1.3em; }
+
+        /* 돌아가기 플로팅 버튼 */
+        .fab-back {
+            position: fixed; bottom: 30px; right: 30px;
+            width: 50px; height: 50px; border-radius: 50%;
+            background: #333; color: white;
+            display: flex; justify-content: center; align-items: center;
+            cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            z-index: 900;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="main-screen">
+        <div class="split-btn btn-left" onclick="showPage('list')">
+            <i class="fas fa-book-open"></i>
+            <div class="split-btn-content">
+                <h1>발표 조회</h1>
+            </div>
+        </div>
+        <div class="split-btn btn-right" onclick="showAuth()">
+            <i class="fas fa-pen-nib"></i>
+            <div class="split-btn-content">
+                <h1>발표 생성</h1>
+            </div>
+        </div>
+    </div>
+
+    <div id="auth-screen" class="pin-wrapper">
+        <h2>관리자 인증</h2>
+        <p>비밀번호 5자리를 입력하세요 (K0352)</p>
+        <div class="pin-inputs" id="pin-container">
+            <input type="password" maxlength="1" class="pin-box">
+            <input type="password" maxlength="1" class="pin-box">
+            <input type="password" maxlength="1" class="pin-box">
+            <input type="password" maxlength="1" class="pin-box">
+            <input type="password" maxlength="1" class="pin-box">
+        </div>
+        <button class="btn-action btn-secondary" onclick="goHome()">돌아가기</button>
+    </div>
+
+    <div id="list-screen" class="container">
+        <h2 class="header-title">발표 목록</h2>
+        
+        <div class="search-bar">
+            <select id="search-option">
+                <option value="all">전체기간</option>
+            </select>
+            <input type="text" id="list-search-keyword" placeholder="발표 제목 입력" style="flex: 1;">
+            <button class="btn-search" onclick="renderUserList()">
+                <i class="fas fa-search"></i> 검색
+            </button>
+        </div>
+
+        <div style="margin-bottom: 10px; color: #666;">
+            Total <strong style="color:red;" id="total-count">0</strong>건
+        </div>
+
+        <table class="list-table">
+            <thead>
+                <tr>
+                    <th style="width: 10%;">번호</th>
+                    <th style="width: 50%;">발표제목</th>
+                    <th style="width: 30%;">발표기간</th>
+                    <th style="width: 10%;">관리</th>
+                </tr>
+            </thead>
+            <tbody id="presentation-list-body">
+                </tbody>
+        </table>
+    </div>
+
+    <div id="query-screen" class="container">
+        <h2 class="header-title" id="query-title">발표 제목</h2>
+        <p style="text-align: center; color: #666;" id="query-period"></p>
+        
+        <div class="detail-card">
+            <div id="dynamic-inputs">
+                </div>
+            <button class="btn-action" style="width:100%;" onclick="executeQuery()">조회버튼</button>
+        </div>
+        
+        <div id="query-result" class="detail-card" style="margin-top: 20px; display: none; background: #f0fdf4; border-color: #86efac;">
+            </div>
+    </div>
+
+    <div id="admin-screen" class="container">
+        <h2 class="header-title">관리자 모드</h2>
+        
+        <div style="background: #fff3cd; padding: 15px; border: 1px solid #ffeeba; border-radius: 5px; margin-bottom: 20px;">
+            <strong>⚠️ GitHub Pages 저장 주의사항</strong><br>
+            이곳에서 생성/수정을 마친 후 반드시 <b>[DB 파일 다운로드]</b>를 하여 
+            GitHub 저장소의 root 폴더에 <code>presentation.txt</code> 파일로 업로드(Commit) 해야 합니다.
+        </div>
+
+        <button class="btn-action" onclick="showCreateForm()">+ 새 발표 등록</button>
+        <button class="btn-action btn-secondary" onclick="downloadDB()">💾 DB 파일 다운로드 (저장용)</button>
+        
+        <h3>등록된 발표 목록</h3>
+        <ul id="admin-list" style="list-style: none; padding: 0;"></ul>
+    </div>
+
+    <div id="form-screen" class="container">
+        <h2 class="header-title" id="form-header">발표 생성</h2>
+        <input type="hidden" id="edit-index">
+        
+        <div class="admin-form">
+            <label>발표 제목</label>
+            <input type="text" id="input-title">
+            
+            <label>발표 기간</label>
+            <div style="display: flex; gap: 10px;">
+                <input type="datetime-local" id="input-start">
+                <input type="datetime-local" id="input-end">
+            </div>
+
+            <label>데이터 입력 (엑셀 업로드 가능)</label>
+            <div style="margin-bottom: 5px;">
+                <input type="file" onchange="readExcel(this)" accept=".xlsx, .xls">
+            </div>
+            <textarea id="input-data" rows="10" placeholder="<이름> <생년월일> <*반> <*번호>&#13;&#10;홍길동 110305 8 21&#13;&#10;김진경 120201 2 31"></textarea>
+            
+            <button class="btn-action" onclick="savePresentation()">저장하기</button>
+            <button class="btn-action btn-secondary" onclick="showPage('admin')">취소</button>
+        </div>
+    </div>
+
+    <div class="fab-back" onclick="goHome()" title="처음으로">
+        <i class="fas fa-home"></i>
+    </div>
+
+    <script>
+        // --- 설정 및 상태 관리 ---
+        const DB_FILE = 'presentation.txt';
+        const SECRET_KEY = 'K0352_SECRET'; // 간단한 암호화 키
+        let presentations = []; // 메모리 상 데이터
+        let currentPresIdx = null;
+
+        // 비밀번호 해시 (K0352 -> SHA256)
+        const ADMIN_HASH = "80f4139f4e2f8914b437292275b287532336338006e0013897b5e406f850e04d";
+
+        // --- 초기화 ---
+        window.onload = async function() {
+            await loadDatabase();
+            setupPin();
+            
+            // 돌아가기 버튼 숨기기 (메인에서만)
+            document.querySelector('.fab-back').style.display = 'none';
+        };
+
+        function goHome() {
+            hideAll();
+            document.getElementById('main-screen').style.display = 'flex';
+            document.querySelector('.fab-back').style.display = 'none';
+            resetPin();
+        }
+
+        function showPage(pageName) {
+            hideAll();
+            document.querySelector('.fab-back').style.display = 'flex';
+            
+            if (pageName === 'list') {
+                document.getElementById('list-screen').classList.add('active');
+                renderUserList();
+            } else if (pageName === 'admin') {
+                document.getElementById('admin-screen').classList.add('active');
+                renderAdminList();
+            }
+        }
+
+        function hideAll() {
+            const screens = ['main-screen', 'auth-screen', 'list-screen', 'query-screen', 'admin-screen', 'form-screen'];
+            screens.forEach(id => {
+                const el = document.getElementById(id);
+                if(el) {
+                    el.style.display = 'none';
+                    el.classList.remove('active');
+                }
+            });
+        }
+
+        // --- 데이터베이스 (DB) 로직 ---
+        
+        // 1. GitHub Pages에서 파일 읽기
+        async function loadDatabase() {
+            try {
+                // 캐시 방지를 위해 timestamp 추가
+                const response = await fetch(DB_FILE + '?v=' + new Date().getTime());
+                if (!response.ok) throw new Error("DB file not found");
+                const encryptedText = await response.text();
+                
+                // 복호화
+                const bytes = CryptoJS.AES.decrypt(encryptedText, SECRET_KEY);
+                const decryptedData = bytes.toString(CryptoJS.enc.Utf8);
+                
+                if (decryptedData) {
+                    presentations = JSON.parse(decryptedData);
+                }
+            } catch (e) {
+                console.log("초기 DB 없음 혹은 로드 실패 (첫 실행 시 정상):", e);
+                presentations = [];
+            }
+        }
+
+        // 2. 관리자용 DB 파일 다운로드
+        function downloadDB() {
+            // 암호화
+            const encrypted = CryptoJS.AES.encrypt(JSON.stringify(presentations), SECRET_KEY).toString();
+            
+            const blob = new Blob([encrypted], { type: 'text/plain' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = DB_FILE;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            alert('presentation.txt 파일이 다운로드되었습니다.\nGitHub 저장소에 이 파일을 업로드하세요.');
+        }
+
+        // --- 관리자 인증 (PIN) ---
+        function showAuth() {
+            hideAll();
+            document.querySelector('.fab-back').style.display = 'flex';
+            document.getElementById('auth-screen').style.display = 'flex'; // flex로 중앙정렬
+            document.querySelectorAll('.pin-box')[0].focus();
+        }
+
+        function setupPin() {
+            const inputs = document.querySelectorAll('.pin-box');
+            inputs.forEach((input, index) => {
+                input.addEventListener('keyup', async (e) => {
+                    if(e.key === 'Backspace' && index > 0 && input.value === '') {
+                        inputs[index-1].focus();
+                    } else if (input.value.length === 1 && index < inputs.length - 1) {
+                        inputs[index+1].focus();
+                    }
+                    
+                    const code = Array.from(inputs).map(i => i.value).join('');
+                    if (code.length === 5) {
+                        // 해시 확인
+                        const msgBuffer = new TextEncoder().encode(code);
+                        const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+                        const hashArray = Array.from(new Uint8Array(hashBuffer));
+                        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+                        if (hashHex === ADMIN_HASH) {
+                            showPage('admin');
+                        } else {
+                            alert('비밀번호 오류');
+                            resetPin();
+                        }
+                    }
+                });
+            });
+        }
+
+        function resetPin() {
+            document.querySelectorAll('.pin-box').forEach(i => i.value = '');
+        }
+
+        // --- 관리자 기능 (CRUD) ---
+        function renderAdminList() {
+            const list = document.getElementById('admin-list');
+            list.innerHTML = '';
+            presentations.forEach((p, idx) => {
+                const li = document.createElement('li');
+                li.style.cssText = "padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between; align-items:center;";
+                li.innerHTML = `
+                    <span>[${idx+1}] <strong>${p.title}</strong> (${p.start} ~ ${p.end})</span>
+                    <div>
+                        <button class="btn-action btn-secondary" style="margin:0; font-size:0.8rem;" onclick="showCreateForm(${idx})">수정</button>
+                        <button class="btn-action btn-danger" style="margin:0; font-size:0.8rem;" onclick="deletePres(${idx})">삭제</button>
+                    </div>
+                `;
+                list.appendChild(li);
+            });
+        }
+
+        function showCreateForm(index = null) {
+            hideAll();
+            document.getElementById('form-screen').classList.add('active');
+            
+            const titleEl = document.getElementById('input-title');
+            const startEl = document.getElementById('input-start');
+            const endEl = document.getElementById('input-end');
+            const dataEl = document.getElementById('input-data');
+            const headerEl = document.getElementById('form-header');
+            const idxEl = document.getElementById('edit-index');
+
+            if (index !== null) {
+                const p = presentations[index];
+                headerEl.innerText = "발표 수정";
+                idxEl.value = index;
+                titleEl.value = p.title;
+                startEl.value = p.start;
+                endEl.value = p.end;
+                
+                // 데이터 배열 -> 텍스트 복원
+                let raw = p.headers.join(' ') + '\n';
+                p.data.forEach(row => raw += row.join(' ') + '\n');
+                dataEl.value = raw;
+            } else {
+                headerEl.innerText = "새 발표 생성";
+                idxEl.value = "";
+                titleEl.value = "";
+                startEl.value = "";
+                endEl.value = "";
+                dataEl.value = "";
+            }
+        }
+
+        // 엑셀 파일 읽기
+        function readExcel(input) {
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                
+                // 텍스트로 변환 (공백 구분)
+                const txt = XLSX.utils.sheet_to_csv(sheet, {FS: " "});
+                document.getElementById('input-data').value = txt;
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function savePresentation() {
+            const idxVal = document.getElementById('edit-index').value;
+            const title = document.getElementById('input-title').value;
+            const start = document.getElementById('input-start').value;
+            const end = document.getElementById('input-end').value;
+            const rawData = document.getElementById('input-data').value;
+
+            if(!title || !start || !rawData) return alert('필수 항목을 입력하세요.');
+
+            // 데이터 파싱
+            const lines = rawData.trim().split('\n');
+            let headers = lines[0].trim().split(/\s+/).map(h => h.replace(/[<>]/g, ''));
+            const data = [];
+            for(let i=1; i<lines.length; i++) {
+                if(!lines[i].trim()) continue;
+                data.push(lines[i].trim().split(/\s+/));
+            }
+
+            const newObj = { title, start, end, headers, data };
+
+            if(idxVal === "") {
+                presentations.push(newObj);
+            } else {
+                presentations[parseInt(idxVal)] = newObj;
+            }
+
+            showPage('admin');
+        }
+
+        function deletePres(idx) {
+            if(confirm('삭제하시겠습니까?')) {
+                presentations.splice(idx, 1);
+                renderAdminList();
+            }
+        }
+
+        // --- 사용자 기능 (조회) ---
+        function renderUserList() {
+            const tbody = document.getElementById('presentation-list-body');
+            const keyword = document.getElementById('list-search-keyword').value.toLowerCase();
+            tbody.innerHTML = '';
+
+            let count = 0;
+            const now = new Date();
+
+            presentations.forEach((p, idx) => {
+                if (keyword && !p.title.toLowerCase().includes(keyword)) return;
+
+                count++;
+                const tr = document.createElement('tr');
+                
+                // 기간 체크
+                const startDate = new Date(p.start);
+                const endDate = new Date(p.end);
+                let btnText = "조회";
+                let btnClass = "btn-action";
+                let clickAction = `onclick="openQuery(${idx})"`;
+
+                if (now < startDate) {
+                    btnText = "대기중";
+                    btnClass = "btn-secondary";
+                    clickAction = `onclick="alert('아직 발표 기간이 아닙니다.')"`;
+                }
+
+                tr.innerHTML = `
+                    <td>${idx + 1}</td>
+                    <td style="text-align:left; font-weight:bold;">${p.title}</td>
+                    <td>${p.start.replace('T', ' ')} ~ ${p.end.replace('T', ' ')}</td>
+                    <td><button class="${btnClass}" style="margin:0; padding:5px 10px;" ${clickAction}>${btnText}</button></td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('total-count').innerText = count;
+            if(count === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="empty-row">조회 가능한 발표가 없습니다.</td></tr>';
+            }
+        }
+
+        function openQuery(idx) {
+            currentPresIdx = idx;
+            const p = presentations[idx];
+            hideAll();
+            document.getElementById('query-screen').classList.add('active');
+            document.querySelector('.fab-back').style.display = 'flex';
+
+            document.getElementById('query-title').innerText = p.title;
+            document.getElementById('query-period').innerText = `[${p.start.replace('T',' ')} ~ ${p.end.replace('T',' ')}]`;
+            document.getElementById('query-result').style.display = 'none';
+
+            const inputsDiv = document.getElementById('dynamic-inputs');
+            inputsDiv.innerHTML = '';
+
+            p.headers.forEach(h => {
+                if(!h.startsWith('*')) {
+                    inputsDiv.innerHTML += `
+                        <div style="margin-bottom:10px;">
+                            <label style="display:block; margin-bottom:5px;">${h}</label>
+                            <input type="text" class="query-input" data-key="${h}" placeholder="${h} 입력" style="width:100%; padding:10px;">
+                        </div>
+                    `;
+                }
+            });
+        }
+
+        function executeQuery() {
+            const p = presentations[currentPresIdx];
+            const inputs = document.querySelectorAll('.query-input');
+            const userInputs = {};
+            
+            // 입력값 수집
+            inputs.forEach(input => {
+                userInputs[input.dataset.key] = input.value.trim();
+            });
+
+            // 데이터 검색
+            const idHeaders = p.headers.map((h, i) => ({name: h, index: i})).filter(obj => !obj.name.startsWith('*'));
+            
+            const foundRow = p.data.find(row => {
+                return idHeaders.every(h => row[h.index] === userInputs[h.name]);
+            });
+
+            const resultDiv = document.getElementById('query-result');
+            resultDiv.style.display = 'block';
+
+            if(foundRow) {
+                let html = '<h3 style="text-align:center; color:#28a745;">조회가 완료되었습니다</h3><hr>';
+                p.headers.forEach((h, i) => {
+                    if(h.startsWith('*')) {
+                        const cleanName = h.substring(1);
+                        html += `
+                            <div class="detail-row">
+                                <span class="detail-label">${cleanName}</span>
+                                <span class="detail-value result-highlight">${foundRow[i]}</span>
+                            </div>
+                        `;
+                    }
+                });
+                resultDiv.innerHTML = html;
+            } else {
+                resultDiv.innerHTML = '<h3 style="text-align:center; color:#dc3545;">발표 목록에 존재하지 않습니다</h3><p style="text-align:center;">입력 정보를 다시 확인해주세요.</p>';
+                resultDiv.style.backgroundColor = '#fff5f5';
+                resultDiv.style.borderColor = '#feb2b2';
+            }
+        }
+    </script>
+</body>
+</html>
